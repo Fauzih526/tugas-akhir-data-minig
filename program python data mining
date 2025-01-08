@@ -18,7 +18,8 @@ def load_data(file_path):
 
 # Langkah 2: Pembersihan Data
 def clean_data(df):
-    # Menghapus kolom 'nama' karena tidak diperlukan untuk analisis numerik
+    # Menghapus kolom 'no' dan 'nama' karena tidak diperlukan untuk analisis numerik
+    df = df.drop(columns=['no'])
     df = df.drop(columns=['nama'])
 
     # Mengisi nilai yang hilang dengan rata-rata atau mode sesuai tipe data
