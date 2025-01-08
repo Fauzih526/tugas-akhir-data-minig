@@ -1,0 +1,168 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, roc_curve, auc
+import matplotlib.pyplot as plt
+
+# Langkah 1: Membaca Data dari File CSV
+def load_data(file_path):
+    try:
+        df = pd.read_csv(file_path)
+        print("Data berhasil dimuat.")
+        return df
+    except FileNotFoundError:
+        print(f"File tidak ditemukan: {file_path}")
+        return None
+
+# Langkah 2: Pembersihan Data
+def clean_data(df):
+    # Menghapus kolom 'nama' karena tidak diperlukan untuk analisis numerik
+    df = df.drop(columns=['nama'])
+
+    # Mengisi nilai yang hilang dengan rata-rata atau mode sesuai tipe data
+    df['berat_badan'] = df['berat_badan'].fillna(df['berat_badan'].mean())
+    df['tinggi_badan'] = df['tinggi_badan'].fillna(df['tinggi_badan'].mean())
+    df['lingkar_perut'] = df['lingkar_perut'].fillna(df['lingkar_perut'].mean())
+    df['tensi'] = df['tensi'].fillna(df['tensi'].mode()[0])  # Mengisi tensi dengan mode (nilai yang sering muncul)
+
+    # Menghapus duplikasi
+    df = df.drop_duplicates()
+
+    return df
+
+# Langkah 3: Menangani Outlier menggunakan Interquartile Range (IQR)
+def remove_outliers(df):
+    # Menentukan batas bawah dan atas untuk deteksi outlier
+    Q1 = df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']].quantile(0.25)
+    Q3 = df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']].quantile(0.75)
+    IQR = Q3 - Q1
+
+    # Menghapus data yang berada di luar rentang IQR
+    df = df[~((df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']] < (Q1 - 1.5 * IQR)) |
+              (df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']] > (Q3 + 1.5 * IQR))).any(axis=1)]
+
+    return df
+
+# Langkah 4: Normalisasi Data
+def normalize_data(df):
+    # Melakukan normalisasi untuk data numerik
+    scaler = StandardScaler()
+    df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']] = scaler.fit_transform(df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut', 'tensi']])
+    return df
+
+# Langkah 5: Membagi Data menjadi Training dan Testing Set
+def split_data(df):
+    # Memisahkan fitur dan target
+    X = df[['umur', 'berat_badan', 'tinggi_badan', 'lingkar_perut']]  # Fitur
+    y = df['tensi']  # Target (kelas)
+
+    # Membagi data menjadi training dan testing set (80% untuk training, 20% untuk testing)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    print(f"Training data size: {X_train.shape[0]}")
+    print(f"Test data size: {X_test.shape[0]}")
+    
+    return X_train, X_test, y_train, y_test
+
+# Langkah 6: Membuat dan Melatih Model (Random Forest Classifier)
+def build_model(X_train, y_train):
+    # Menggunakan Random Forest untuk klasifikasi
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    print("Model berhasil dilatih.")
+    return model
+
+# Langkah 7: Evaluasi Model
+def evaluate_model(model, X_test, y_test):
+    # Menggunakan model untuk prediksi pada data uji
+    y_pred = model.predict(X_test)
+
+    # Menghitung akurasi dan laporan klasifikasi
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Akurasi Model: {accuracy:.4f}")
+    
+    # Laporan klasifikasi yang lebih detail
+    print("\nLaporan Klasifikasi:\n", classification_report(y_test, y_pred))
+
+    # Confusion Matrix
+    print("\nConfusion Matrix:")
+    cm = confusion_matrix(y_test, y_pred)
+    print(cm)
+    
+    # Plot Confusion Matrix
+    plt.figure(figsize=(6, 6))
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix")
+    plt.colorbar()
+    tick_marks = range(len(cm))
+    plt.xticks(tick_marks, ['Normal', 'Tinggi'])
+    plt.yticks(tick_marks, ['Normal', 'Tinggi'])
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.tight_layout()
+    plt.show()
+
+    # ROC Curve and AUC
+    if len(set(y_test)) > 1:  # Pastikan ada lebih dari satu kelas dalam target
+        fpr, tpr, thresholds = roc_curve(y_test, model.predict_proba(X_test)[:, 1])
+        roc_auc = auc(fpr, tpr)
+        print(f"AUC: {roc_auc:.4f}")
+
+        # Plot ROC Curve
+        plt.figure(figsize=(6, 6))
+        plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (AUC = {roc_auc:.4f})')
+        plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic')
+        plt.legend(loc="lower right")
+        plt.show()
+    else:
+        print("ROC Curve tidak dapat dihitung karena hanya ada satu kelas dalam data.")
+
+# Langkah 8: Menyimpan Data yang Sudah Diproses
+def save_processed_data(df, output_file):
+    df.to_csv(output_file, index=False)
+    print(f"Data yang telah diproses berhasil disimpan di {output_file}.")
+
+# Main Program
+def main():
+    # Path ke file CSV
+    file_path = 'posyandu_lansia.csv'
+    
+    # Membaca data
+    df = load_data(file_path)
+    if df is None:
+        return
+    
+    # Pra-pemrosesan data
+    print("Memulai pra-pemrosesan data...")
+
+    # Pembersihan data
+    df = clean_data(df)
+
+    # Menangani outlier
+    df = remove_outliers(df)
+
+    # Normalisasi data
+    df = normalize_data(df)
+
+    # Membagi data menjadi training dan testing set
+    X_train, X_test, y_train, y_test = split_data(df)
+
+    # Membangun dan melatih model
+    model = build_model(X_train, y_train)
+
+    # Evaluasi model
+    evaluate_model(model, X_test, y_test)
+
+    # Menyimpan data yang sudah diproses
+    save_processed_data(df, 'posyandu_lansia_processed.csv')
+
+# Menjalankan program utama
+if __name__ == '__main__':
+    main()
